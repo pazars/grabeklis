@@ -31,3 +31,7 @@ def join_jsons(pattern: str, out_fname: str):
     out_fpath = data_dir / out_fname
     with open(out_fpath, "w") as combined_file:
         json.dump(combined_data, combined_file, indent=4)
+
+
+def get_project_root_dir():
+    return Path(__file__).resolve().parent.parent
