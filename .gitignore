@@ -169,3 +169,5 @@ cache
 
 # Environment variables for notebooks (python-dotenv)
 .env
+
+dumps

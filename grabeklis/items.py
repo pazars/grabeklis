@@ -22,6 +22,6 @@ class LSMArticle(scrapy.Item):
 
     def has_missing_content(self):
         for value in vars(self).values():
-            if len(value) == 0:
+            if not value or len(value) == 0:
                 return True
         return False
