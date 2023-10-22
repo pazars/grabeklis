@@ -159,8 +159,10 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
-# Stored and generated data
+# Stored, generated data, log files, random experiments
 data
+dumps
+sandbox
 
 .vscode
 
@@ -169,5 +171,3 @@ cache
 
 # Environment variables for notebooks (python-dotenv)
 .env
-
-dumps
