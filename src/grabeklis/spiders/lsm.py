@@ -40,7 +40,7 @@ def prepare_item_from_response(response, dt_start: datetime):
 
         # This year's dates don't have year, yesterday's date say yesterday etc.
         publish_date = utils.parse_datetime(publish_date, dt_start)
-        publish_date = publish_date.strftime("%Y-%m-%d %H:%M:%S")
+        publish_date = publish_date.strftime("%Y-%m-%d %H:%M")
 
         # Main article <div>
         article_div = response.xpath('//div[@class="article__body"]')
@@ -158,16 +158,18 @@ class LSMSitemapSpider(SitemapSpider):
 
     dumps_dir = project_dir / "dumps"
 
-    archive_name = "items_all.json"
-    history_name = "history.json"
-    # TODO: Implement same logic for failed items as items -> make_history
+    archive_name = "items_ok.json"
+    history_name = "history_ok.json"
+
     run_fail_name = "run_failed_items.json"
-    fail_name = "failed_item_history.json"
+    fail_archive_name = "items_failed.json"
+    fail_history_name = "history_failed.json"
 
     this_run = {}
-    lsm_articles = []
-    lsm_history = set()
-    fail_history = []
+    articles_ok = []
+    articles_failed = []
+    history_ok = set()
+    history_failed = set()
 
     batch_file_size = 1024 * 20  # 1 MB x n
     batch_prefix = "batch_articles"
@@ -210,11 +212,16 @@ class LSMSitemapSpider(SitemapSpider):
 
         self.archive_path = self.spider_dir / self.archive_name
         self.url_history_path = self.spider_dir / self.history_name
-        self.fail_history_path = self.spider_run_dir / self.run_fail_name
+        self.failed_url_history_path = self.spider_dir / self.fail_history_name
+        self.failed_articles_path = self.spider_run_dir / self.run_fail_name
 
         if self.url_history_path.exists():
             with open(self.url_history_path, "r") as f:
-                self.lsm_history = set(json.load(f))
+                self.history_ok = set(json.load(f))
+
+        if self.failed_url_history_path.exists():
+            with open(self.failed_url_history_path, "r") as f:
+                self.history_failed = set(json.load(f))
 
         if "dt-from" in kwargs:
             last_article_dtime = datetime.strptime(kwargs["dt-from"], "%Y%m%d%H%M%S")
@@ -262,7 +269,7 @@ class LSMSitemapSpider(SitemapSpider):
                 year, week = match[0]
                 entry_dtime = self.datetime_from_year_week(year, week)
             else:
-                if url in self.lsm_history:
+                if url in self.history_ok:
                     continue
 
                 # Article urls
@@ -315,22 +322,25 @@ class LSMSitemapSpider(SitemapSpider):
 
         self.logger.info(f"Scraping: {response.url}")
 
-        if response.url in self.lsm_history:
+        if response.url in self.history_ok:
             self.logger.info(f"Already scraped: {response.url}")
+            return
+        elif response.url in self.history_failed:
+            self.logger.info(f"Already failed to scrape: {response.url}")
             return
 
         item = prepare_item_from_response(response, dt_start)
 
         if item.check_if_failed():
-            self.fail_history.append((response.url, item["error"]))
+            self.articles_failed.append(dict(item))
         else:
-            self.lsm_articles.append(dict(item))
-            self.lsm_history.add(response.url)
+            self.articles_ok.append(dict(item))
+            self.history_ok.add(response.url)
 
         # Save results as an intermediate file when size is getting bigger
         # Avoids memory issues and large info loss in case of errors
         if self.save_results:
-            result_size = sys.getsizeof(self.lsm_articles)
+            result_size = sys.getsizeof(self.articles_ok)
             if result_size >= self.batch_file_size:
                 self.save_articles()
 
@@ -344,10 +354,10 @@ class LSMSitemapSpider(SitemapSpider):
         time_str = datetime.now().strftime("%Y%m%d%H%M%S")
         file_path = self.spider_run_dir / f"{self.batch_prefix}_{time_str}.json"
         with open(file_path, "w") as file:
-            json.dump(list(self.lsm_articles), file)
+            json.dump(list(self.articles_ok), file)
 
-        self.num_articles_saved += len(self.lsm_articles)
-        self.lsm_articles = []
+        self.num_articles_saved += len(self.articles_ok)
+        self.articles_ok = []
 
     def spider_closed(self, spider, reason):
         """
@@ -360,7 +370,7 @@ class LSMSitemapSpider(SitemapSpider):
         Returns:
             None
         """
-        if len(self.lsm_articles) > 0 and self.save_results:
+        if len(self.articles_ok) > 0 and self.save_results:
             self.save_articles()
 
         tfinish = datetime.now().astimezone().isoformat()
@@ -368,28 +378,40 @@ class LSMSitemapSpider(SitemapSpider):
         self.stats.set_value("item_saved_count", self.num_articles_saved)
 
         if self.save_results:
-            num_new, num_dupes = utils.join_run_items_with_archive(
+            # Copy successfully scraped articles to article archive
+            num_new, num_dupes = utils.copy_run_items_to_archive(
                 pattern=self.batch_prefix + "*",
                 spider_run_dir=self.spider_run_dir,
                 archive_fname=self.archive_name,
             )
 
+            # Create a list of scraped urls from most up-to-date archive
             utils.make_history_file(
                 spider_name=self.name,
                 archive_fname=self.archive_name,
                 history_fname="history.json",
             )
 
-            with open(self.fail_history_path, "w", encoding="utf-8") as file:
-                json.dump(self.fail_history, file, indent=4)
+            # Save failed items
+            with open(self.failed_articles_path, "w", encoding="utf-8") as file:
+                json.dump(self.articles_failed, file, indent=4)
 
-            utils.join_run_fails_with_fail_archive(
+            # Copy failed items to failed item archive
+            utils.copy_failed_items_to_archive(
                 spider_run_dir=self.spider_run_dir,
                 fail_run_fname=self.run_fail_name,
-                fail_archive_fname=self.fail_name,
+                fail_archive_fname=self.fail_archive_name,
             )
 
-            self.stats.set_value("failed_to_scrape", len(self.fail_history))
+            # Create a list of urls that the crawled failed to scrape
+            # from most up-to-date failed item archive
+            utils.make_history_file(
+                spider_name=self.name,
+                archive_fname=self.fail_archive_name,
+                history_fname=self.fail_history_name,
+            )
+
+            self.stats.set_value("failed_to_scrape", len(self.articles_failed))
         else:
             num_new, num_dupes = None, None
 

@@ -16,7 +16,7 @@ NEWSPIDER_MODULE = "grabeklis.spiders"
 
 STATS_CLASS = "grabeklis.stats_collector.DefaultStatsCollector"
 
-PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PROJECT_DIR = os.path.join(os.path.expanduser("~"), "Documents", "grabeklis")
 
 
 # Crawl responsibly by identifying yourself (and your website) on the user-agent
