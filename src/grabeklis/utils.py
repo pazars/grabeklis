@@ -31,7 +31,7 @@ def generate_unique_id(url):
 def copy_failed_items_to_archive(
     spider_run_dir: Path,
     fail_run_fname: str = "run_failed_items.json",
-    fail_archive_fname: str = "history_failed_items.json",
+    fail_archive_fname: str = "items_failed.json",
 ):
     # Initialize an empty list to store the combined data
     combined_data = []
@@ -71,7 +71,7 @@ def copy_failed_items_to_archive(
 def copy_run_items_to_archive(
     pattern: str,
     spider_run_dir: Path,
-    archive_fname: str = "items_all.json",
+    archive_fname: str = "items_ok.json",
 ):
     # Initialize an empty list to store the combined data
     combined_data = []
@@ -227,7 +227,7 @@ def parse_datetime(datums: str, dt: datetime):
 
 def check_if_history_unique(
     spider_name: str,
-    history_fname: str = "history.json",
+    history_fname: str = "history_ok.json",
 ):
     project_dir = Path(settings.PROJECT_DIR)
     spider_dir = project_dir / "data" / spider_name
@@ -244,7 +244,7 @@ def check_if_history_unique(
 
 def load_items(
     spider_name: str,
-    fname: str = "items_all.json",
+    fname: str = "items_ok.json",
 ):
     project_dir = Path(settings.PROJECT_DIR)
     spider_dir = project_dir / "data" / spider_name
@@ -256,9 +256,24 @@ def load_items(
     return items
 
 
+def save_items(
+    items,
+    spider_name: str,
+    fname: str = "items_ok.json",
+):
+    project_dir = Path(settings.PROJECT_DIR)
+    spider_dir = project_dir / "data" / spider_name
+    fpath = spider_dir / fname
+
+    with open(fpath, "w", encoding="utf-8") as file:
+        json.dump(items, file)
+
+    return items
+
+
 def load_failed_history(
     spider_name: str,
-    fname: str = "failed_history.json",
+    fname: str = "history_failed.json",
 ):
     project_dir = Path(settings.PROJECT_DIR)
     spider_dir = project_dir / "data" / spider_name
@@ -302,6 +317,24 @@ def remove_failed_from_items(
         json.dump(items, file)
 
     return new_fails
+
+
+def remove_ambiguous_dates(
+    spider_name: str,
+    archive_name: str = "items_ok.json",
+):
+    items = load_items(spider_name, archive_name)
+
+    counter = 0
+    for idx, item in enumerate(items):
+        date = item["datums"].lower()
+        if "vakar" in date or "šodien" in date:
+            items.pop(idx)
+            counter += 1
+
+    save_items(items, spider_name, archive_name)
+
+    return counter
 
 
 if __name__ == "__main__":
@@ -365,5 +398,9 @@ if __name__ == "__main__":
     #     archive_fname="failed_item_history.json",
     #     history_fname="history_fail2.json",
     # )
+
+    # Test: Remove ambiguous date items from archive
+    # removed = remove_ambiguous_dates("lsmsitemap", "items_ok.json")
+    # print(f"Removed {removed} items")
 
     print("Done")
