@@ -15,6 +15,19 @@ from grabeklis.items import LSMArticle
 from grabeklis import settings, utils
 
 
+IGNORE_ARTICLE_CATEGORIES = (
+    "Apmaksāta informācija*",
+    "Spilgtākie video",
+    "Infografikas",
+    "YouTube apskats",
+    "Animācijas",
+    "Audio",
+    "Komiksi un karikatūras",
+    "Podkāsti",
+    "Raidījumi",
+)
+
+
 def tidy_string(s: str) -> str:
     """Common string parsing ops"""
 
@@ -28,6 +41,9 @@ def tidy_string(s: str) -> str:
     # Remove multiple consecutive spaces and leading/trailing spaces
     s = re.sub(r"\s+", " ", s).strip()
 
+    if len(s) == 0:
+        raise RuntimeError("No information found.")
+
     return s
 
 
@@ -35,6 +51,15 @@ def prepare_item_from_response(response, dt_start: datetime):
     """Extract and parse any relevant information from an article."""
 
     try:
+        # First check article category.
+        # Some contain mostly audio, video or pictures. Those are excluded.
+        # Paid articles are also excluded.
+        category = response.xpath('//div[@class="info-item category"]/a/text()').get()
+        category = tidy_string(category)
+
+        if category in IGNORE_ARTICLE_CATEGORIES:
+            raise ValueError(f"Article category '{category}' in ignore list")
+
         publish_date = response.xpath('//div[@class="info-item time"]/text()').get()
         publish_date = tidy_string(publish_date)
 
@@ -62,9 +87,6 @@ def prepare_item_from_response(response, dt_start: datetime):
         lead_div = response.xpath('//h2[@class="article-lead"]')
         lead = lead_div.xpath("./text()|./following-sibling::p/text()").get()
         lead = tidy_string(lead)
-
-        category = response.xpath('//div[@class="info-item category"]/a/text()').get()
-        category = tidy_string(category)
 
         title = response.xpath('//h1[@class="article-title"]/text()').get()
         title = tidy_string(title)
@@ -104,7 +126,8 @@ class LSMTestSpider(Spider):
             # "https://www.lsm.lv/raksts/kultura/muzika/25.08.2023-dzezs-pieskandina-latgali-luznavas-muiza-pulcejas-entuziasti-no-visas-baltijas.a521557/",
             # "https://www.lsm.lv/raksts/sports/hokejs/skudras-un-daugavina-torpedo-spejusi-norekinaties-ar-hokejistiem-par-augustu.a256646/",
             # "https://www.lsm.lv/raksts/dzive--stils/vecaki-un-berni/17.04.2023-atskirigas-vertibas-un-prioritates-nespeja-risinat-nesaskanas-biezakie-iemesli-neveiksmigam-paru-attiecibam.a505180/",
-            "https://www.lsm.lv/raksts/zinas/latvija/11.10.2023-policija-masveida-draudu-vestulu-avots-ir-darbojies-ari-polija-un-asv.a527393/?utm_source=lsm&utm_medium=article-right&utm_campaign=popular",
+            # "https://www.lsm.lv/raksts/zinas/latvija/11.10.2023-policija-masveida-draudu-vestulu-avots-ir-darbojies-ari-polija-un-asv.a527393/?utm_source=lsm&utm_medium=article-right&utm_campaign=popular",
+            "https://www.lsm.lv/raksts/arpus-etera/komiksi/09.08.2023-cuku-komikss-apartamenti-ar-naves-smaku.a519434/"
         ]
 
         for url in urls:
@@ -389,7 +412,7 @@ class LSMSitemapSpider(SitemapSpider):
             utils.make_history_file(
                 spider_name=self.name,
                 archive_fname=self.archive_name,
-                history_fname="history.json",
+                history_fname=self.history_name,
             )
 
             # Save failed items

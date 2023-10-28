@@ -3,13 +3,8 @@ import glob
 import hashlib
 
 from datetime import datetime, timedelta
-
-try:
-    from grabeklis import settings
-except ModuleNotFoundError:
-    import settings
-
 from pathlib import Path
+from grabeklis import settings
 
 
 def generate_unique_id(url):
@@ -30,8 +25,8 @@ def generate_unique_id(url):
 
 def copy_failed_items_to_archive(
     spider_run_dir: Path,
-    fail_run_fname: str = "run_failed_items.json",
-    fail_archive_fname: str = "items_failed.json",
+    fail_run_fname: str,
+    fail_archive_fname: str,
 ):
     # Initialize an empty list to store the combined data
     combined_data = []
@@ -71,7 +66,7 @@ def copy_failed_items_to_archive(
 def copy_run_items_to_archive(
     pattern: str,
     spider_run_dir: Path,
-    archive_fname: str = "items_ok.json",
+    archive_fname: str,
 ):
     # Initialize an empty list to store the combined data
     combined_data = []
@@ -227,7 +222,7 @@ def parse_datetime(datums: str, dt: datetime):
 
 def check_if_history_unique(
     spider_name: str,
-    history_fname: str = "history_ok.json",
+    history_fname: str,
 ):
     project_dir = Path(settings.PROJECT_DIR)
     spider_dir = project_dir / "data" / spider_name
@@ -244,7 +239,7 @@ def check_if_history_unique(
 
 def load_items(
     spider_name: str,
-    fname: str = "items_ok.json",
+    fname: str,
 ):
     project_dir = Path(settings.PROJECT_DIR)
     spider_dir = project_dir / "data" / spider_name
@@ -259,7 +254,7 @@ def load_items(
 def save_items(
     items,
     spider_name: str,
-    fname: str = "items_ok.json",
+    fname: str,
 ):
     project_dir = Path(settings.PROJECT_DIR)
     spider_dir = project_dir / "data" / spider_name
@@ -271,29 +266,15 @@ def save_items(
     return items
 
 
-def load_failed_history(
-    spider_name: str,
-    fname: str = "history_failed.json",
-):
-    project_dir = Path(settings.PROJECT_DIR)
-    spider_dir = project_dir / "data" / spider_name
-    fpath = spider_dir / fname
-
-    with open(fpath, encoding="utf-8") as file:
-        failed_items = json.load(file)
-
-    return failed_items
-
-
 def remove_failed_from_items(
     spider_name: str,
-    fail_fname: str = "failed_item_history.json",
-    item_fname: str = "items_all.json",
+    fail_fname: str,
+    item_fname: str,
 ):
     # Normally fails are in failed_history.json
     # This is just in case something gets messed up.
     items = load_items(spider_name, item_fname)
-    failed_history = load_failed_history(spider_name, fail_fname)
+    failed_history = load_items(spider_name, fail_fname)
 
     new_fails = []
     for idx, item in enumerate(items):
@@ -321,7 +302,7 @@ def remove_failed_from_items(
 
 def remove_ambiguous_dates(
     spider_name: str,
-    archive_name: str = "items_ok.json",
+    archive_name: str,
 ):
     items = load_items(spider_name, archive_name)
 
@@ -400,7 +381,7 @@ if __name__ == "__main__":
     # )
 
     # Test: Remove ambiguous date items from archive
-    # removed = remove_ambiguous_dates("lsmsitemap", "items_ok.json")
-    # print(f"Removed {removed} items")
+    removed = remove_ambiguous_dates("lsmsitemap", "items_ok.json")
+    print(f"Removed {removed} items")
 
     print("Done")
