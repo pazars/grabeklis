@@ -93,10 +93,7 @@ def prepare_item_from_response(response, dt_start: datetime):
 
         url = response.url
 
-        id = utils.generate_unique_id(url)
-
         item = LSMArticle(
-            id=id,
             url=url,
             datums=publish_date,
             kategorija=category,

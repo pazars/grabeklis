@@ -1,26 +1,38 @@
 import json
 import glob
-import hashlib
 
 from datetime import datetime, timedelta
 from pathlib import Path
 from grabeklis import settings
 
 
-def generate_unique_id(url):
-    # Create a hashlib object
-    hasher = hashlib.sha256()
+def load_items(
+    spider_name: str,
+    fname: str,
+):
+    project_dir = Path(settings.PROJECT_DIR)
+    spider_dir = project_dir / "data" / spider_name
+    fpath = spider_dir / fname
 
-    # Encode the URL as bytes (UTF-8 encoding)
-    url_bytes = url.encode("utf-8")
+    with open(fpath, encoding="utf-8") as file:
+        items = json.load(file)
 
-    # Update the hasher with the URL bytes
-    hasher.update(url_bytes)
+    return items
 
-    # Get the hexadecimal representation of the hash
-    unique_id = hasher.hexdigest()
 
-    return unique_id
+def save_items(
+    items,
+    spider_name: str,
+    fname: str,
+):
+    project_dir = Path(settings.PROJECT_DIR)
+    spider_dir = project_dir / "data" / spider_name
+    fpath = spider_dir / fname
+
+    with open(fpath, "w", encoding="utf-8") as file:
+        json.dump(items, file)
+
+    return items
 
 
 def copy_failed_items_to_archive(
@@ -71,9 +83,19 @@ def copy_run_items_to_archive(
     # Initialize an empty list to store the combined data
     combined_data = []
 
-    data_dir = spider_run_dir.parent
+    pattern = (spider_run_dir / pattern).as_posix()
+
+    print(f"Search files matching pattern: {pattern}")
+
+    # Use glob to find all JSON files in a directory
+    files = glob.glob(pattern)
+
+    if len(files) == 0:
+        return (0, 0)
+    print(f"Found {len(files)} files")
 
     # Load the existing archive if it already exists
+    data_dir = spider_run_dir.parent
     archive = data_dir / archive_fname
     archive_data = []
     if archive.exists():
@@ -83,15 +105,6 @@ def copy_run_items_to_archive(
     size_existing = len(archive_data)
 
     combined_data += archive_data
-
-    pattern = (spider_run_dir / pattern).as_posix()
-
-    print(f"Search files matching pattern: {pattern}")
-
-    # Use glob to find all JSON files in a directory
-    files = glob.glob(pattern)
-
-    print(f"Found {len(files)} files")
 
     # Read and merge JSON files
     for fpath in files:
@@ -235,35 +248,6 @@ def check_if_history_unique(
     if len(data) == len(data_unique):
         return True
     return False
-
-
-def load_items(
-    spider_name: str,
-    fname: str,
-):
-    project_dir = Path(settings.PROJECT_DIR)
-    spider_dir = project_dir / "data" / spider_name
-    fpath = spider_dir / fname
-
-    with open(fpath, encoding="utf-8") as file:
-        items = json.load(file)
-
-    return items
-
-
-def save_items(
-    items,
-    spider_name: str,
-    fname: str,
-):
-    project_dir = Path(settings.PROJECT_DIR)
-    spider_dir = project_dir / "data" / spider_name
-    fpath = spider_dir / fname
-
-    with open(fpath, "w", encoding="utf-8") as file:
-        json.dump(items, file)
-
-    return items
 
 
 def remove_failed_from_items(

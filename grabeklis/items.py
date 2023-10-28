@@ -8,7 +8,6 @@ import scrapy
 
 # TODO: Write unit tests for this
 class LSMArticle(scrapy.Item):
-    id = scrapy.Field()
     url = scrapy.Field()
     datums = scrapy.Field()
     kategorija = scrapy.Field()

@@ -1,6 +1,6 @@
-import utils
-
 from datetime import datetime, timedelta
+
+from grabeklis import utils
 
 
 class TestParseDatetime:
