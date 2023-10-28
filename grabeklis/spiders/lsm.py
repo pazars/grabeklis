@@ -117,17 +117,31 @@ class LSMTestSpider(Spider):
 
     name = "lsmpage"
 
-    def __init__(self, *args, **kwargs):
+    @classmethod
+    def from_crawler(cls, crawler, *args, **kwargs):
+        return cls(crawler, *args, **kwargs)
+
+    def __init__(self, crawler, *args, **kwargs):
         super(LSMTestSpider, self).__init__(*args, **kwargs)
+
+        # Connect a signal that triggers after spider closed
+        # but process still running. Used for file output and logging.
+        self.crawler = crawler
+        self.crawler.signals.connect(self.spider_closed, signal=signals.spider_closed)
+
+        self.dt_start = datetime.now()
 
     def start_requests(self):
         urls = [
-            # "https://www.lsm.lv/raksts/laika-zinas/laika-zinas/28.08.2023-pirmdien-visa-latvija-lis-daudzviet-stipri-bus-ari-brazmains-vejs.a521709/",
-            # "https://www.lsm.lv/raksts/kultura/muzika/25.08.2023-dzezs-pieskandina-latgali-luznavas-muiza-pulcejas-entuziasti-no-visas-baltijas.a521557/",
-            # "https://www.lsm.lv/raksts/sports/hokejs/skudras-un-daugavina-torpedo-spejusi-norekinaties-ar-hokejistiem-par-augustu.a256646/",
-            # "https://www.lsm.lv/raksts/dzive--stils/vecaki-un-berni/17.04.2023-atskirigas-vertibas-un-prioritates-nespeja-risinat-nesaskanas-biezakie-iemesli-neveiksmigam-paru-attiecibam.a505180/",
-            # "https://www.lsm.lv/raksts/zinas/latvija/11.10.2023-policija-masveida-draudu-vestulu-avots-ir-darbojies-ari-polija-un-asv.a527393/?utm_source=lsm&utm_medium=article-right&utm_campaign=popular",
-            "https://www.lsm.lv/raksts/arpus-etera/komiksi/09.08.2023-cuku-komikss-apartamenti-ar-naves-smaku.a519434/"
+            "https://www.lsm.lv/raksts/laika-zinas/laika-zinas/28.08.2023-pirmdien-visa-latvija-lis-daudzviet-stipri-bus-ari-brazmains-vejs.a521709/",
+            "https://www.lsm.lv/raksts/kultura/muzika/25.08.2023-dzezs-pieskandina-latgali-luznavas-muiza-pulcejas-entuziasti-no-visas-baltijas.a521557/",
+            "https://www.lsm.lv/raksts/sports/hokejs/skudras-un-daugavina-torpedo-spejusi-norekinaties-ar-hokejistiem-par-augustu.a256646/",
+            "https://www.lsm.lv/raksts/dzive--stils/vecaki-un-berni/17.04.2023-atskirigas-vertibas-un-prioritates-nespeja-risinat-nesaskanas-biezakie-iemesli-neveiksmigam-paru-attiecibam.a505180/",
+            "https://www.lsm.lv/raksts/zinas/latvija/11.10.2023-policija-masveida-draudu-vestulu-avots-ir-darbojies-ari-polija-un-asv.a527393/?utm_source=lsm&utm_medium=article-right&utm_campaign=popular",
+            "https://www.lsm.lv/raksts/arpus-etera/komiksi/09.08.2023-cuku-komikss-apartamenti-ar-naves-smaku.a519434/",
+            "https://www.lsm.lv/raksts/arpus-etera/komiksi/11.08.2023-karikaturista-skats-tuvojas-kadastralas-vertibas.a519622/",
+            "https://www.lsm.lv/raksts/kas-notiek-latvija/raidijumi/10.08.2023-video-kas-notiek-ar-karina-valdibu-un-ministru-prezidenta-ultimatu-koalicijas-partneriem.a519636/",
+            "https://www.lsm.lv/raksts/zinas/arzemes/07.08.2023-ukraina-aiztureta-sieviete-par-uzbrukuma-planosanu-zelenskim.a519253/",
         ]
 
         for url in urls:
@@ -135,12 +149,19 @@ class LSMTestSpider(Spider):
 
     def parse(self, response):
         now = datetime.now()
+
+        # if now > self.dt_start:
+        #     self.crawler.engine.close_spider(self, "Approaching midnight")
+
         download_time = timedelta(seconds=response.meta.get("download_latency"))
         dt_start = now - download_time
 
         item = prepare_item_from_response(response, dt_start)
 
         yield item
+
+    def spider_closed(self, spider, reason):
+        pass
 
 
 class LSMSitemapSpider(SitemapSpider):
@@ -176,9 +197,7 @@ class LSMSitemapSpider(SitemapSpider):
     # Get the directory path of the running script
     project_dir = Path(settings.PROJECT_DIR)
     data_dir = project_dir / "data"
-
     spider_dir = data_dir / name
-
     dumps_dir = project_dir / "dumps"
 
     archive_name = "items_ok.json"
@@ -338,8 +357,18 @@ class LSMSitemapSpider(SitemapSpider):
         Returns:
             scrapy.Item: The scraped article item.
         """
-        # Best estimate of when the download was started
         now = datetime.now()
+        if now.hour == 23 and now.minute >= 45:
+            # At midnigh all today's dates are labeled as yesterday.
+            # Yesterday's dates are given a standard-looking date.
+            # To avoid mislabeling article publish dates, we simply don't scrape
+            # close to midnight.
+            self.crawler.engine.close_spider(
+                self, "Approaching midnight; Dates will update."
+            )
+
+        # Best estimate of when the download was started
+
         download_time = timedelta(seconds=response.meta.get("download_latency"))
         dt_start = now - download_time
 
