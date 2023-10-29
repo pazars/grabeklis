@@ -4,15 +4,15 @@ import json
 import pytz
 import traceback
 
-from pathlib import Path
 from datetime import datetime, timedelta
 
 import scrapy
 from scrapy import signals
 from scrapy.spiders import Spider, SitemapSpider
 
+from grabeklis import utils
 from grabeklis.items import LSMArticle
-from grabeklis import settings, utils
+from grabeklis.handlers import ScrapedDataHandler
 
 
 IGNORE_ARTICLE_CATEGORIES = (
@@ -180,41 +180,54 @@ class LSMSitemapSpider(SitemapSpider):
 
     """
 
+    # Spider name
     name = "lsmsitemap"
+
+    # User option: save scraped items
+    save_scraped = True
+
+    # User option: earliest publish dates to scrape
+    dt_from = datetime.min
+
+    # Scraping entry point
     sitemap_urls = ["https://www.lsm.lv/sitemap.xml"]
 
-    # There are also other sites like 'tēmas' but we ignore them.
+    # Parse only urls with 'raksts'
     sitemap_rules = [
         ("/raksts/", "parse_article"),
     ]
 
+    # Sitemap's datetime format
     fmt = "%Y-%m-%dT%H:%M:%S%z"
+
+    # Timezone in which articles are published
     tz_info = pytz.timezone("Europe/Riga")
 
-    # Get the directory path of the running script
-    project_dir = Path(settings.PROJECT_DIR)
-    data_dir = project_dir / "data"
-    spider_dir = data_dir / name
-    dumps_dir = project_dir / "dumps"
+    # RAM threshold for saving files in bytes
+    # Too high: Risk of losing more, slower pc
+    # Too low: Too many files for long runs
+    batch_file_size = 1024 * 20
 
-    archive_name = "items_ok.json"
-    history_name = "history_ok.json"
+    # Data handler here used to get directory names
+    # In general used to test and join multiple run data
+    data_handler = ScrapedDataHandler(name, mode="test")
 
-    run_fail_name = "run_failed_items.json"
-    fail_archive_name = "items_failed.json"
-    fail_history_name = "history_failed.json"
+    data_dir = data_handler.data_dir
+    spider_dir = data_handler.spider_data_dir
+
+    batch_prefix = data_handler.batch_prefix
+    archive_name = data_handler.ok_archive_name
+    history_name = data_handler.ok_history_name
+
+    run_fail_name = data_handler.fail_run_name
+    fail_archive_name = data_handler.fail_archive_name
+    fail_history_name = data_handler.fail_history_name
 
     this_run = {}
     articles_ok = []
     articles_failed = []
     history_ok = set()
     history_failed = set()
-
-    batch_file_size = 1024 * 20  # 1 MB x n
-    batch_prefix = "batch_articles"
-
-    save_results = True
-    num_articles_saved = 0
 
     @classmethod
     def from_crawler(cls, crawler, *args, **kwargs):
@@ -242,12 +255,12 @@ class LSMSitemapSpider(SitemapSpider):
         # Spider logs
         self.stats = self.crawler.stats
 
-        # Log spider initialization time with timezone
+        # Spider run data dir is its start time parsed
         self.tstart = datetime.now(tz=self.tz_info)
-        self.stats.set_value("start_time_tz", self.tstart.strftime(self.fmt))
+        self.run_dir_name = self.tstart.strftime("%Y%m%d%H%M%S")
 
         # This is where any output besides logs ends up
-        self.spider_run_dir = self.spider_dir / self.tstart.strftime("%Y%m%d%H%M%S")
+        self.spider_run_dir = self.spider_dir / self.run_dir_name
 
         self.archive_path = self.spider_dir / self.archive_name
         self.url_history_path = self.spider_dir / self.history_name
@@ -263,17 +276,16 @@ class LSMSitemapSpider(SitemapSpider):
                 self.history_failed = set(json.load(f))
 
         if "dt-from" in kwargs:
-            last_article_dtime = datetime.strptime(kwargs["dt-from"], "%Y%m%d%H%M%S")
-        else:
-            # Use the publish date of the most recent article in archive
-            # as scrape starting point (time-wise).
-            last_article_dtime = utils.find_last_article_date(self.archive_path)
+            # User-specified earliest datetime scraped
+            self.dt_from = datetime.strptime(kwargs["dt-from"], "%Y%m%d%H%M%S")
 
-        self.last_article_dtime = self.tz_info.localize(last_article_dtime)
+        # Add timezone info because scraped articles with timezone
+        # Otherwise can't compare dates (naive vs. aware)
+        self.dt_from = self.tz_info.localize(self.dt_from)
 
         if "save" in kwargs:
-            self.save_results = kwargs["save"].lower() == "false"
-            self.logger.info(self.save_results)
+            self.save_scraped = kwargs["save"].lower() == "false"
+            self.logger.info(self.save_scraped)
 
     def sitemap_filter(self, entries):
         """
@@ -314,7 +326,7 @@ class LSMSitemapSpider(SitemapSpider):
                 # Article urls
                 entry_dtime = datetime.strptime(entry["lastmod"], self.fmt)
 
-            if entry_dtime > self.last_article_dtime:
+            if entry_dtime > self.dt_from:
                 yield entry
 
     def datetime_from_year_week(self, year, week):
@@ -388,7 +400,7 @@ class LSMSitemapSpider(SitemapSpider):
 
         # Save results as an intermediate file when size is getting bigger
         # Avoids memory issues and large info loss in case of errors
-        if self.save_results:
+        if self.save_scraped:
             result_size = sys.getsizeof(self.articles_ok)
             if result_size >= self.batch_file_size:
                 self.save_articles()
@@ -405,7 +417,6 @@ class LSMSitemapSpider(SitemapSpider):
         with open(file_path, "w") as file:
             json.dump(list(self.articles_ok), file)
 
-        self.num_articles_saved += len(self.articles_ok)
         self.articles_ok = []
 
     def spider_closed(self, spider, reason):
@@ -419,50 +430,17 @@ class LSMSitemapSpider(SitemapSpider):
         Returns:
             None
         """
-        if len(self.articles_ok) > 0 and self.save_results:
-            self.save_articles()
-
         tfinish = datetime.now().astimezone().isoformat()
         self.stats.set_value("finish_time_tz", tfinish)
-        self.stats.set_value("item_saved_count", self.num_articles_saved)
 
-        if self.save_results:
-            # Copy successfully scraped articles to article archive
-            num_new, num_dupes = utils.copy_run_items_to_archive(
-                pattern=self.batch_prefix + "*",
-                spider_run_dir=self.spider_run_dir,
-                archive_fname=self.archive_name,
-            )
+        if not self.save_scraped:
+            return
 
-            # Create a list of scraped urls from most up-to-date archive
-            utils.make_history_file(
-                spider_name=self.name,
-                archive_fname=self.archive_name,
-                history_fname=self.history_name,
-            )
+        # Save ok items
+        if len(self.articles_ok) > 0:
+            self.save_articles()
 
-            # Save failed items
-            with open(self.failed_articles_path, "w", encoding="utf-8") as file:
+        # Save failed items
+        if len(self.articles_failed) > 0:
+            with open(self.failed_articles_path, "a", encoding="utf-8") as file:
                 json.dump(self.articles_failed, file, indent=4)
-
-            # Copy failed items to failed item archive
-            utils.copy_failed_items_to_archive(
-                spider_run_dir=self.spider_run_dir,
-                fail_run_fname=self.run_fail_name,
-                fail_archive_fname=self.fail_archive_name,
-            )
-
-            # Create a list of urls that the crawled failed to scrape
-            # from most up-to-date failed item archive
-            utils.make_history_file(
-                spider_name=self.name,
-                archive_fname=self.fail_archive_name,
-                history_fname=self.fail_history_name,
-            )
-
-            self.stats.set_value("failed_to_scrape", len(self.articles_failed))
-        else:
-            num_new, num_dupes = None, None
-
-        self.stats.set_value("archive_new_entries", num_new)
-        self.stats.set_value("archive_duplicates_skipped", num_dupes)

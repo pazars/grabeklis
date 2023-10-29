@@ -1,10 +1,9 @@
-import os
-
 from datetime import datetime
 
 from scrapy.statscollectors import StatsCollector
 from scrapy.utils.serialize import ScrapyJSONEncoder
 
+from pathlib import Path
 from grabeklis import settings
 
 
@@ -14,13 +13,15 @@ class DefaultStatsCollector(StatsCollector):
 
         encoder = ScrapyJSONEncoder()
 
-        prj_dir = settings.PROJECT_DIR
-        dumps_dir = os.path.join(prj_dir, "dumps")
-        if not os.path.exists(dumps_dir):
-            os.mkdir(dumps_dir)
+        prj_dir = Path(settings.PROJECT_DIR)
+        logs_dir = prj_dir / "logs" / spider.name
 
-        fpath = os.path.join(dumps_dir, f"stats_{spider.name}_{date}.json")
-        fpath_last = os.path.join(dumps_dir, f"stats_{spider.name}_last.json")
+        if not logs_dir.exists():
+            logs_dir.mkdir(parents=True)
+
+        # TODO: Log date doesn't match data date
+        fpath = logs_dir / f"{date}.json"
+        fpath_last = logs_dir / "last.json"
 
         with open(fpath, "w") as file:
             data = encoder.encode(stats)

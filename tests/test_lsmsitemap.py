@@ -12,7 +12,6 @@ from tests.conftest import spider_dir, run_dir
 
 OK_KEYS = set(
     (
-        "id",
         "url",
         "datums",
         "kategorija",
