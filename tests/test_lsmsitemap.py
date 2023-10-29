@@ -7,6 +7,7 @@ from pathlib import Path
 from datetime import datetime
 
 from grabeklis import settings
+from tests.conftest import spider_dir, run_dir
 
 
 OK_KEYS = set(
@@ -108,20 +109,46 @@ KNOWN_CATEGORIES = set(
     )
 )
 
-project_dir = Path(settings.PROJECT_DIR)
-data_dir = project_dir / "data_test" / "lsmsitemap"
+PROJECT_DIR = Path(settings.PROJECT_DIR)
+DATA_DIR = PROJECT_DIR / "data_test"
+
+
+def find_ok(path: Path):
+    return [f for f in path.glob("batch_articles_*.json")]
+
+
+def find_fail(path: Path):
+    return [f for f in path.glob("run_failed_items.json")]
+
 
 batch_ok_paths = []
 batch_fail_paths = []
-for obj in data_dir.glob("*"):
-    if not obj.is_dir():
-        continue
 
-    for file in obj.glob("batch_articles_*.json"):
-        batch_ok_paths.append(file)
+if spider_dir:
+    if run_dir:
+        # Specific dir of a specific spider
+        path = DATA_DIR / spider_dir / run_dir
+        batch_ok_paths = find_ok(path)
+        batch_fail_paths = find_fail(path)
+    else:
+        # Specific spider
+        path = DATA_DIR / spider_dir
+        for obj in path.glob("*"):
+            if not obj.is_dir():
+                continue
 
-    fail_path = obj / "run_failed_items.json"
-    batch_fail_paths.append(fail_path)
+            batch_ok_paths += find_ok(obj)
+            batch_fail_paths += find_fail(obj)
+elif not run_dir:
+    # Return file paths from all dirs in all spiders
+    for obj in DATA_DIR.rglob("*"):
+        if not obj.is_dir():
+            continue
+        batch_ok_paths += find_ok(obj)
+        batch_fail_paths += find_fail(obj)
+else:
+    # Just dir without spider ambigous
+    raise RuntimeError("'dir' argument also needs 'spider'")
 
 
 @pytest.mark.parametrize("path", batch_fail_paths)
