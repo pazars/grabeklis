@@ -187,7 +187,7 @@ class LSMSitemapSpider(SitemapSpider):
     save_scraped = True
 
     # User option: earliest publish dates to scrape
-    dt_from = datetime.min
+    dt_from = datetime(1900, 1, 1, 0, 0)
 
     # Scraping entry point
     sitemap_urls = ["https://www.lsm.lv/sitemap.xml"]
@@ -444,3 +444,8 @@ class LSMSitemapSpider(SitemapSpider):
         if len(self.articles_failed) > 0:
             with open(self.failed_articles_path, "a", encoding="utf-8") as file:
                 json.dump(self.articles_failed, file, indent=4)
+
+        info = self.data_handler.add_scraped_data_to_archives(self.run_dir_name)
+
+        for key, value in info.items():
+            self.stats.set_value(key, value)

@@ -4,7 +4,10 @@ import glob
 
 from pathlib import Path
 
-from grabeklis import settings
+try:
+    from grabeklis import settings
+except ModuleNotFoundError:
+    import settings
 
 
 class ScrapedDataHandler:
@@ -140,10 +143,13 @@ class ScrapedDataHandler:
             archive_path = self.spider_data_dir / self.ok_archive_name
             history_path = self.spider_data_dir / self.ok_history_name
         elif archive == "failed":
-            archive_path = self.spider_data_dir / self.ok_archive_name
-            history_path = self.spider_data_dir / self.ok_history_name
+            archive_path = self.spider_data_dir / self.fail_archive_name
+            history_path = self.spider_data_dir / self.fail_history_name
         else:
             raise RuntimeError("Invalid value for argument 'archive'")
+
+        if not archive_path.exists():
+            return
 
         with open(archive_path, "r") as file:
             data = json.load(file)
@@ -156,7 +162,7 @@ class ScrapedDataHandler:
         with open(history_path, "w") as file:
             json.dump(urls, file, indent=4)
 
-    def merge_run_data_with_archive(self, run_name: str) -> dict:
+    def add_scraped_data_to_archives(self, run_name: str) -> dict:
         if self.mode != "test":
             raise RuntimeError("Function call only allowed in test mode")
 
@@ -189,3 +195,15 @@ class ScrapedDataHandler:
         self.make_history_file("failed")
 
         return info
+
+    def create_archives_from_scraped_data(self):
+        for obj in self.spider_data_dir.glob("*"):
+            if obj.is_dir():
+                print(f"Archiving {obj.name}")
+                info = self.add_scraped_data_to_archives(obj.name)
+                print(info)
+
+
+if __name__ == "__main__":
+    handler = ScrapedDataHandler("lsmsitemap")
+    handler.create_archives_from_scraped_data()
