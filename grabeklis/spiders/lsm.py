@@ -446,6 +446,7 @@ class LSMSitemapSpider(SitemapSpider):
                 json.dump(self.articles_failed, file, indent=4)
 
         info = self.data_handler.add_scraped_data_to_archives(self.run_dir_name)
+        self.data_handler.make_archive_summaries()
 
         for key, value in info.items():
             self.stats.set_value(key, value)

@@ -40,6 +40,10 @@ class ScrapedDataHandler:
         self.ok_archive_name = "archive_ok.json"
         self.ok_history_name = "_history_ok.json"
 
+        # File name with summary info of the final dataset
+        self.summary_name = "summary.json"
+        self.summary_path = self.spider_data_dir / self.summary_name
+
     def run_batch_tests(self, run_dir: str | None = None):
         if run_dir:
             cmd = f"pytest --spider={self.spider_name} --dir={run_dir}"
@@ -162,6 +166,8 @@ class ScrapedDataHandler:
         with open(history_path, "w") as file:
             json.dump(urls, file, indent=4)
 
+        return len(urls)
+
     def add_scraped_data_to_archives(self, run_name: str) -> dict:
         if self.mode != "test":
             raise RuntimeError("Function call only allowed in test mode")
@@ -182,19 +188,28 @@ class ScrapedDataHandler:
         info["new_in_ok_archive"] = new_ok
         info["skipped_ok_duplicates"] = dupe_ok
 
-        # Update successfully scraped article url history
-        self.make_history_file("ok")
-
         # Copy failed to scrape articles to archive
         new_fail, dupe_fail = self.archive_failed_run_items(run_name)
 
         info["new_in_failed_archive"] = new_fail
         info["skipped_fail_duplicates"] = dupe_fail
 
-        # Update failed to scrape article url history
-        self.make_history_file("failed")
-
         return info
+
+    def make_archive_summaries(self):
+        # Update successfully scraped article url history
+        num_ok = self.make_history_file("ok")
+
+        # Update failed to scrape article url history
+        num_fail = self.make_history_file("failed")
+
+        summary = {
+            "num_articles_ok": num_ok,
+            "num_articles_failed": num_fail,
+        }
+
+        with open(self.summary_path, "w", encoding="utf-8") as file:
+            json.dump(summary, file, indent=4)
 
     def create_archives_from_scraped_data(self):
         for obj in self.spider_data_dir.glob("*"):
@@ -206,4 +221,4 @@ class ScrapedDataHandler:
 
 if __name__ == "__main__":
     handler = ScrapedDataHandler("lsmsitemap")
-    handler.create_archives_from_scraped_data()
+    handler.make_archive_summaries()
