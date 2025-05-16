@@ -85,7 +85,12 @@ def prepare_item_from_response(response, dt_start: datetime):
 
         # Sometimes there is a <p> element inside <h2> with the text
         lead_div = response.xpath('//h2[@class="article-lead"]')
+        
         lead = lead_div.xpath("./text()|./following-sibling::p/text()").get()
+        if lead is None or len(lead) < 2:  # can be ' '
+            lead_parts = lead_div.xpath(".//text()|./following-sibling::p//text()").extract()
+            lead = " ".join(lead_parts).replace("  ", " ").strip()
+
         lead = tidy_string(lead)
 
         title = response.xpath('//h1[@class="article-title"]/text()').get()
@@ -112,7 +117,7 @@ def prepare_item_from_response(response, dt_start: datetime):
 class LSMTestSpider(Spider):
     """Spider that crawls a single page. Great for testing."""
 
-    name = "lsmpage"
+    name = "lsmtest"
 
     @classmethod
     def from_crawler(cls, crawler, *args, **kwargs):
@@ -125,10 +130,11 @@ class LSMTestSpider(Spider):
         # but process still running. Used for file output and logging.
         self.crawler = crawler
         self.crawler.signals.connect(self.spider_closed, signal=signals.spider_closed)
+        self.settings = crawler.settings
 
         self.dt_start = datetime.now()
 
-    def start_requests(self):
+    async def start(self):
         urls = [
             "https://www.lsm.lv/raksts/laika-zinas/laika-zinas/28.08.2023-pirmdien-visa-latvija-lis-daudzviet-stipri-bus-ari-brazmains-vejs.a521709/",
             "https://www.lsm.lv/raksts/kultura/muzika/25.08.2023-dzezs-pieskandina-latgali-luznavas-muiza-pulcejas-entuziasti-no-visas-baltijas.a521557/",
@@ -251,9 +257,7 @@ class LSMSitemapSpider(SitemapSpider):
         # but process still running. Used for file output and logging.
         self.crawler = crawler
         self.crawler.signals.connect(self.spider_closed, signal=signals.spider_closed)
-
-        # Spider logs
-        self.stats = self.crawler.stats
+        self.settings = crawler.settings
 
         # Spider run data dir is its start time parsed
         self.tstart = datetime.now(tz=self.tz_info)
@@ -431,7 +435,7 @@ class LSMSitemapSpider(SitemapSpider):
             None
         """
         tfinish = datetime.now().astimezone().isoformat()
-        self.stats.set_value("finish_time_tz", tfinish)
+        self.crawler.stats.set_value("finish_time_tz", tfinish)
 
         if not self.save_scraped:
             return
@@ -449,4 +453,4 @@ class LSMSitemapSpider(SitemapSpider):
         self.data_handler.make_archive_summaries()
 
         for key, value in info.items():
-            self.stats.set_value(key, value)
+            self.crawler.stats.set_value(key, value)

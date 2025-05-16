@@ -105,6 +105,7 @@ KNOWN_CATEGORIES = set(
         "Mans treneris",
         "informācija",
         "YouTube apskats",
+        "Skatpunkts",
     )
 )
 

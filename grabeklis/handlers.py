@@ -138,7 +138,7 @@ class ScrapedDataHandler:
 
         # Serialize combined data to a new JSON file
         with open(archive, "w") as archive_file:
-            json.dump(combined_data, archive_file)
+            json.dump(combined_data, archive_file, ensure_ascii=False, indent=4)
 
         return (num_new_added, num_dupes)
 

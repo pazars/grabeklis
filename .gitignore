@@ -171,3 +171,7 @@ cache
 
 # Environment variables for notebooks (python-dotenv)
 .env
+
+logs
+data
+data_test
