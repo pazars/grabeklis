@@ -7,17 +7,10 @@
 #     https://docs.scrapy.org/en/latest/topics/downloader-middleware.html
 #     https://docs.scrapy.org/en/latest/topics/spider-middleware.html
 
-import os
-
 BOT_NAME = "grabeklis"
 
 SPIDER_MODULES = ["grabeklis.spiders"]
 NEWSPIDER_MODULE = "grabeklis.spiders"
-
-STATS_CLASS = "grabeklis.stats_collector.DefaultStatsCollector"
-
-PROJECT_DIR = os.path.join(os.path.expanduser("~"), "Documents", "grabeklis")
-
 
 # Crawl responsibly by identifying yourself (and your website) on the user-agent
 # USER_AGENT = "grabeklis (+http://www.yourdomain.com)"

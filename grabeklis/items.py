@@ -9,11 +9,11 @@ import scrapy
 # TODO: Write unit tests for this
 class LSMArticle(scrapy.Item):
     url = scrapy.Field()
-    datums = scrapy.Field()
-    kategorija = scrapy.Field()
-    virsraksts = scrapy.Field()
-    kopsavilkums = scrapy.Field()
-    raksts = scrapy.Field()
+    date = scrapy.Field()
+    category = scrapy.Field()
+    title = scrapy.Field()
+    summary = scrapy.Field()
+    article = scrapy.Field()
     error = scrapy.Field()
 
     def check_if_failed(self):
