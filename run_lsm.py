@@ -15,11 +15,13 @@ mongo_uri = os.environ.get("MONGO_URI")
 mongo_db = os.environ.get("MONGO_DB")
 mongo_collection = os.environ.get("MONGO_COLLECTION")
 
+fmt = "%Y%m%d%H%M%S"
 two_days_ago = datetime.now() - timedelta(days=2)
 two_days_ago_midnight = two_days_ago.replace(hour=0, minute=0, second=0)
-dt_from = two_days_ago_midnight.strftime("%Y%m%d%H%M%S")
+
+dt_from = two_days_ago_midnight.strftime(fmt)
 if "DT_FROM" in os.environ:
-    dt_from = os.environ.get("DTFROM", "19900101000000")
+    dt_from = os.environ.get("DT_FROM")
 
 kwargs = {
     "mongo_uri": mongo_uri,
@@ -33,8 +35,8 @@ settings = get_project_settings()
 
 # Override/add specific settings
 if "MAX_ITEMS" in os.environ:
-    settings.set("CLOSESPIDER_ITEMCOUNT", os.environ["MAX_ITEMS"])
-
+    max_items = int(os.environ["MAX_ITEMS"])
+    settings.set("CLOSESPIDER_ITEMCOUNT", max_items)
 
 process = CrawlerProcess(settings)
 process.crawl("lsmsitemap", **kwargs)

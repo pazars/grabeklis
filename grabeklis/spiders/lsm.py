@@ -107,7 +107,15 @@ class LSMSitemapSpider(SitemapSpider):
 
         # Add timezone info because scraped articles with timezone
         # Otherwise can't compare dates (naive vs. aware)
-        self.dt_from = self.tz_info.localize(self.dt_from)
+        self.dt_from = self.tz_info.localize(self.dt_from, is_dst=None)
+        
+        # Adjust dt_from so that isocalendar() week starts on Sunday (not Monday)
+        # If dt_from is not Sunday, move to previous Sunday
+        dt_from_sunday = self.dt_from - timedelta(days=(self.dt_from.weekday() + 1) % 7)
+        self.year_from, self.week_from = dt_from_sunday.isocalendar()[:2]
+
+        self.logger.debug(f"dt_from: {self.dt_from}")
+        self.logger.debug(f"From {self.year_from}W{self.week_from}")
 
     def sitemap_filter(self, entries):
         """
@@ -143,8 +151,9 @@ class LSMSitemapSpider(SitemapSpider):
                 entry_dtime = self._datetime_from_year_week(year, week)
             else:
                 entry_dtime = datetime.strptime(entry["lastmod"], self.fmt)
+                year, week, _ = entry_dtime.isocalendar()
 
-            if entry_dtime > self.dt_from:
+            if int(year) >= self.year_from and int(week) >= self.week_from:
                 yield entry
 
     def parse_article(self, response):
@@ -173,6 +182,12 @@ class LSMSitemapSpider(SitemapSpider):
         dt_start = now - download_time
 
         item = self._prepare_item_from_response(response, dt_start)
+
+        if 'date' not in item:
+            self._mongo_insert_or_update(self.collection_nok, item)
+            return
+        elif item['date'] < self.dt_from:
+            return
 
         if item.check_if_failed():
             if hasattr(self, "collection_nok"):
@@ -230,21 +245,21 @@ class LSMSitemapSpider(SitemapSpider):
 
             # This year's dates don't have year, yesterday's date say yesterday etc.
             publish_date = utils.parse_datetime(publish_date, dt_start)
-            # publish_date = publish_date.strftime("%Y-%m-%d %H:%M")
 
             # Main article <div>
             article_div = response.xpath('//div[@class="article__body"]')
 
-            # Select text from <p> or <blockqoute> elements in article <div>
+            # Select text from <p> or <blockquote> elements in article <div>
             article_as_list = article_div.xpath(
                 "./p/text()|./blockquote/p/text()"
             ).extract()
 
+            # Edge case: if no text found, try extracting from child <div> elements
+            if not article_as_list or len(article_as_list) == 0:
+                article_as_list = article_div.xpath("./div//text()").extract()
+
             # Convert from list of strings to a single string
-            article = ""
-            for paragraph in article_as_list:
-                # Whitespace after end of sentence
-                article += " " + paragraph
+            article = " ".join(article_as_list)
 
             article = self._tidy_string(article)
 

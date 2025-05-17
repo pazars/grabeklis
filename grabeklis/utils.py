@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+import pytz
 
 
 def parse_datetime(datums: str, dt: datetime):
@@ -52,5 +53,23 @@ def parse_datetime(datums: str, dt: datetime):
         hour=int(hour),
         minute=int(min),
     )
+    # Add timezone information to the datetime object
+    timezone = pytz.timezone("Europe/Riga")
+    # Preserve the existing time
+    localized_date = timezone.localize(date, is_dst=None)
 
-    return date
+    return localized_date
+
+if __name__ == "__main__":
+    # Example usage
+
+    dt = datetime.now()
+    datums = "1. februāris, 08:30"
+    parsed_date = parse_datetime(datums, dt)
+    # Figures out the year and winter timezone
+    print(parsed_date)
+
+    datums = "Šodien, 08:30"
+    parsed_date = parse_datetime(datums, dt)
+    # Figures out its today and what timezone
+    print(parsed_date)

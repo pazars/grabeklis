@@ -3,3 +3,4 @@ pandas==2.2.3
 pymongo==4.13.0
 pytz
 python-dotenv
+loguru
