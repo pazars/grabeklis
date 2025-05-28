@@ -1,47 +1,11 @@
 from __future__ import annotations
 
 import os
-import sys
-import json
 import dotenv
-import loguru
 from loguru import logger
 from datetime import datetime, timedelta
 from scrapy.crawler import CrawlerProcess
 from scrapy.utils.project import get_project_settings
-
-
-logger.remove()
-LOG_LEVEL = os.getenv("LOG_LEVEL", "DEBUG").upper()
-
-
-def cloud_logging_sink(message: loguru.Message):
-    record = message.record
-
-    gcp_severity_map = {
-        "TRACE": "DEBUG",
-        "DEBUG": "DEBUG",
-        "INFO": "INFO",
-        "SUCCESS": "INFO",
-        "WARNING": "WARNING",
-        "ERROR": "ERROR",
-        "CRITICAL": "CRITICAL",
-    }
-
-    log_entry = {
-        "message": record["message"],
-        "severity": gcp_severity_map.get(record["level"].name, "INFO"),
-        "timestamp": record["time"].isoformat(),
-        "file": record["file"].name,
-        "line": record["line"],
-        "function": record["function"],
-        **record["extra"],
-    }
-
-    print(json.dumps(log_entry), file=sys.stdout)
-
-
-logger.add(cloud_logging_sink, level=LOG_LEVEL, enqueue=True)
 
 
 # For development
