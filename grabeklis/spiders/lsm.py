@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from scrapy.spiders import SitemapSpider
 
 from pymongo import MongoClient
-from pymongo.errors import DuplicateKeyError
+from pymongo.errors import DuplicateKeyError, OperationFailure
 from pymongo.collection import Collection
 
 from grabeklis import utils
@@ -94,10 +94,14 @@ class LSMSitemapSpider(SitemapSpider):
             self.db = self.mongo_client[self.mongo_db]
 
             self.collection_ok = self.db[self.mongo_collection]
-            self.collection_ok.create_index([("url", 1)], unique=True)
-
             self.collection_nok = self.db[self.mongo_collection + "_failed"]
-            self.collection_nok.create_index([("url", 1)], unique=True)
+
+            try:
+                self.collection_ok.create_index([("url", 1)], unique=True)
+                self.collection_nok.create_index([("url", 1)], unique=True)
+            except OperationFailure as e:
+                # Firestore does not support creating indices from connectors
+                self.logger.warning(e)
 
         # User option: earliest publish dates to scrape
         self.dt_from = datetime(1900, 1, 1, 0, 0)
