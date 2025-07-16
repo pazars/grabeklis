@@ -175,3 +175,5 @@ cache
 logs
 data
 data_test
+
+.DS_Store

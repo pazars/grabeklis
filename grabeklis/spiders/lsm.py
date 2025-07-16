@@ -44,6 +44,8 @@ class LSMSitemapSpider(SitemapSpider):
     scrapy crawl <name> -a save=false
     to not save results in files (useful for testing)
 
+    scrapy shell <url> in CLI for debug
+
     """
 
     # Spider name
@@ -267,8 +269,8 @@ class LSMSitemapSpider(SitemapSpider):
 
             article = self._tidy_string(article)
 
-            # Sometimes there is a <p> element inside <h2> with the text
-            lead_div = response.xpath('//h2[@class="article-lead"]')
+            # Sometimes there is a <p> element inside with the text
+            lead_div = response.xpath('//div[@class="article-lead"]')
 
             lead = lead_div.xpath("./text()|./following-sibling::p/text()").get()
             if lead is None or len(lead) < 2:  # can be ' '
