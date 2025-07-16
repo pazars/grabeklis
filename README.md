@@ -29,3 +29,16 @@ _Concurrent requests not in queue still executed_
 ### Don't save save results in files (useful for testing)
 
 `scrapy crawl <spider-name> -a save=false`
+
+
+## Push image to GCP
+
+First setup repository authentication.
+Setup instructions are in GCP's Artifact Registry.
+
+Then, build and push:
+
+```
+docker build . name:tag
+docker push path/to/repository/name:tag
+```
