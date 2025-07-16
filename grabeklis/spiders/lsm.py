@@ -2,7 +2,7 @@ import re
 import pytz
 import traceback
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from scrapy.spiders import SitemapSpider
 
@@ -114,7 +114,7 @@ class LSMSitemapSpider(SitemapSpider):
         # Add timezone info because scraped articles with timezone
         # Otherwise can't compare dates (naive vs. aware)
         self.dt_from = self.tz_info.localize(self.dt_from, is_dst=None)
-        
+
         # Adjust dt_from so that isocalendar() week starts on Sunday (not Monday)
         # If dt_from is not Sunday, move to previous Sunday
         dt_from_sunday = self.dt_from - timedelta(days=(self.dt_from.weekday() + 1) % 7)
@@ -189,10 +189,10 @@ class LSMSitemapSpider(SitemapSpider):
 
         item = self._prepare_item_from_response(response, dt_start)
 
-        if 'date' not in item:
+        if "date" not in item:
             self._mongo_insert_or_update(self.collection_nok, item)
             return
-        elif item['date'] < self.dt_from:
+        elif item["date"] < self.dt_from:
             return
 
         if item.check_if_failed():
@@ -297,7 +297,11 @@ class LSMSitemapSpider(SitemapSpider):
 
         except Exception:
             err = traceback.format_exc()
-            return LSMArticle(url=response.url, error=err)
+            return LSMArticle(
+                url=response.url,
+                date=datetime.now(tz=timezone.utc),
+                error=err,
+            )
 
         return item
 
