@@ -39,7 +39,7 @@ Setup instructions are in GCP's Artifact Registry.
 Then, build and push:
 
 ```
-docker build . [LOCAL_IMAGE_NAME]:[TAG]
+docker buildx build --platform linux/amd64 . [LOCAL_IMAGE_NAME]:[TAG]
 docker tag [LOCAL_IMAGE_NAME]:[TAG] [REGION]-docker.pkg.dev/[PROJECT_ID]/[REPOSITORY_NAME]/[IMAGE_NAME]:[TAG]
 docker push [REGION]-docker.pkg.dev/[PROJECT_ID]/[REPOSITORY_NAME]/[IMAGE_NAME]:[TAG]
 ```
