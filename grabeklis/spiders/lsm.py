@@ -349,17 +349,20 @@ class LSMSitemapSpider(SitemapSpider):
 
         try:
             result = collection.update_one(filter_criteria, update_data, upsert=True)
+            item_url = item.get("url")
             if result.upserted_id is not None:
                 self.logger.info(
-                    f"Inserted new document with URL '{item.get('url')}' and _id: {result.upserted_id}"
+                    f"Inserted new document with URL '{item_url}' and _id: {result.upserted_id}"
                 )
             elif result.modified_count > 0:
                 self.logger.info(
-                    f"Updated existing document with URL '{item.get('url')}'"
+                    f"Updated existing document with URL '{item_url}'"
                 )
+            elif result.matched_count > 0 and result.modified_count == 0:
+                self.logger.info(f"Existing document {item_url} matches new entry. Skipped.")
             else:
                 self.logger.warning(
-                    f"No document matched URL '{item.get('url')}' and no update occurred"
+                    f"No document matched URL '{item_url}' and no update occurred"
                 )
         except DuplicateKeyError:
             self.logger.error(
