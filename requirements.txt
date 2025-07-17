@@ -4,3 +4,4 @@ pymongo==4.13.0
 pytz
 python-dotenv
 loguru
+tqdm

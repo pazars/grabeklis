@@ -4,6 +4,7 @@ import traceback
 
 from datetime import datetime, timedelta, timezone
 
+from scrapy import signals
 from scrapy.spiders import SitemapSpider
 
 from pymongo import MongoClient
@@ -82,6 +83,7 @@ class LSMSitemapSpider(SitemapSpider):
             None
         """
         super(LSMSitemapSpider, self).__init__(*args, **kwargs)
+        crawler.signals.connect(self.spider_closed, signal=signals.spider_closed)
 
         self.crawler = crawler
         self.settings = crawler.settings
@@ -189,10 +191,15 @@ class LSMSitemapSpider(SitemapSpider):
 
         item = self._prepare_item_from_response(response, dt_start)
 
-        if "date" not in item:
+        if not item:
+            # In ignored categories
+            return
+        elif "error" in item:
+            # Error occured
             self._mongo_insert_or_update(self.collection_nok, item)
             return
-        elif item["date"] < self.dt_from:
+        elif "date" in item and item["date"] < self.dt_from:
+            # Outdated (can happen because whole week is processed)
             return
 
         if item.check_if_failed():
@@ -231,7 +238,7 @@ class LSMSitemapSpider(SitemapSpider):
 
         return result_date
 
-    def _prepare_item_from_response(self, response, dt_start: datetime):
+    def _prepare_item_from_response(self, response, dt_start: datetime) -> LSMArticle | None:
         """Extract and parse any relevant information from an article."""
 
         try:
@@ -245,6 +252,7 @@ class LSMSitemapSpider(SitemapSpider):
 
             if category in IGNORE_ARTICLE_CATEGORIES:
                 self.logger.info(f"Article category '{category}' in ignore list")
+                return None
 
             publish_date = response.xpath('//div[@class="info-item time"]/text()').get()
             publish_date = self._tidy_string(publish_date)
@@ -297,9 +305,12 @@ class LSMSitemapSpider(SitemapSpider):
 
         except Exception:
             err = traceback.format_exc()
+            now = datetime.now(tz=timezone.utc)
+            dt = self.tz_info.localize(now, is_dst=None)
+
             return LSMArticle(
                 url=response.url,
-                date=datetime.now(tz=timezone.utc),
+                date=dt,
                 error=err,
             )
 
@@ -354,3 +365,22 @@ class LSMSitemapSpider(SitemapSpider):
             self.logger.error(
                 f"DuplicateKeyError for '{item.get('url')}'. Ensure a unique index exists on the 'url' field."
             )
+
+    def spider_closed(self, spider):
+        self.logger.info("Running spider_closed routine")
+        self.logger.info("Checking if previous fails still relevant")
+
+        count_before = self.collection_nok.count_documents({})
+        self.logger.info(f"Beginning of check: {count_before} entries in NOK")
+        for document in self.collection_nok.find({}):
+            url = document.get('url')
+            url_in_ok = self.collection_ok.find_one({"url": url})
+            if url_in_ok:
+                self.logger.info(f"Found nok {url} in ok")
+                result = self.collection_nok.delete_one({"url": url})
+                if result.deleted_count > 0:
+                    self.logger.info(f"Removed {url} from nok")
+
+        count_after = self.collection_nok.count_documents({})
+        self.logger.info(f"After check: {count_after} entries in NOK")
+        self.logger.info(f"Removed {count_before - count_after} entries")
