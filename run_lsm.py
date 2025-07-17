@@ -37,6 +37,8 @@ kwargs = {
     "mongo_db": mongo_db,
     "mongo_collection": mongo_collection,
     "dt_from": dt_from,
+    # "mode": "debug",
+    # "urls_to_parse": [],
 }
 
 # Load default settings

@@ -2,8 +2,9 @@ import re
 import pytz
 import traceback
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
+import scrapy
 from scrapy import signals
 from scrapy.spiders import SitemapSpider
 
@@ -75,8 +76,11 @@ class LSMSitemapSpider(SitemapSpider):
         Initializes the LSMSitemapSpider object.
 
         Args:
-            crawler (Crawler): The crawler object.
+            :param crawler (Crawler): The crawler object.
             *args: Variable length argument list.
+            :param urls_to_parse: A comma-separated string of URLs to parse directly.
+            :param mode: 'sitemap' to crawl sitemap, 'debug' to parse specific URLs.
+                    Defaults to 'sitemap'.
             **kwargs: Arbitrary keyword arguments.
 
         Returns:
@@ -87,6 +91,24 @@ class LSMSitemapSpider(SitemapSpider):
 
         self.crawler = crawler
         self.settings = crawler.settings
+
+        self.mode = kwargs.get("mode", "sitemap").lower()
+        self.debug_urls = kwargs.get("urls_to_parse", [])
+
+        if self.mode == 'debug' and len(self.debug_urls) == 0:
+            self.logger.warning(
+                "Debug mode selected but no 'urls_to_parse' provided. "
+                "The spider will have no URLs to crawl."
+            )
+        elif self.mode == 'sitemap' and len(self.debug_urls) > 0:
+            self.logger.info(
+                "Specific URLs were provided, but 'sitemap' mode is active. "
+                "Only sitemap URLs will be crawled."
+            )
+        elif self.mode == 'debug' and len(self.debug_urls) > 0:
+            self.logger.info(f"Spider running in DEBUG mode, parsing URLs: {self.debug_urls}")
+        else: # Default sitemap mode
+            self.logger.info("Spider running in SITEMAP mode.")
 
         # MongoDB
         self.mongo_uri = kwargs.get("mongo_uri")
@@ -124,6 +146,22 @@ class LSMSitemapSpider(SitemapSpider):
 
         self.logger.debug(f"dt_from: {self.dt_from}")
         self.logger.debug(f"From {self.year_from}W{self.week_from}")
+
+    async def start(self):
+        """
+        Generates initial requests based on the selected mode.
+        """
+        if self.mode == 'debug':
+            # Only yield requests for specific URLs if in debug mode
+            for url in self.debug_urls:
+                yield scrapy.Request(url=url, callback=self.parse_article, dont_filter=True)
+        elif self.mode == 'sitemap':
+            # Only yield requests from the sitemap if in sitemap mode
+            async for request in super().start():
+                yield request
+        else:
+            self.logger.error(f"Invalid mode '{self.mode}' specified. No requests will be generated.")
+
 
     def sitemap_filter(self, entries):
         """
@@ -204,7 +242,22 @@ class LSMSitemapSpider(SitemapSpider):
 
         if item.check_if_failed():
             if hasattr(self, "collection_nok"):
-                self._mongo_insert_or_update(self.collection_nok, item)
+                # Check if this is a known exception
+                document = self.collection_nok.find_one(
+                    {"url": item.url},
+                    {"reviewed": 1, "_id": 0},
+                )
+                is_reviewed = None
+                if document:
+                    is_reviewed = document.get("reviewed")
+
+                # Ignore reviewed exceptions
+                if is_reviewed:
+                    self.logger.info(f"Article with errors {item.url} has already been reviewed")
+                else:
+                    item.reviewed = False
+                    self._mongo_insert_or_update(self.collection_nok, item)
+                    
         else:
             if hasattr(self, "collection_ok"):
                 self._mongo_insert_or_update(self.collection_ok, item)
@@ -238,7 +291,9 @@ class LSMSitemapSpider(SitemapSpider):
 
         return result_date
 
-    def _prepare_item_from_response(self, response, dt_start: datetime) -> LSMArticle | None:
+    def _prepare_item_from_response(
+        self, response, dt_start: datetime
+    ) -> LSMArticle | None:
         """Extract and parse any relevant information from an article."""
 
         try:
@@ -305,12 +360,9 @@ class LSMSitemapSpider(SitemapSpider):
 
         except Exception:
             err = traceback.format_exc()
-            now = datetime.now(tz=timezone.utc)
-            dt = self.tz_info.localize(now, is_dst=None)
 
             return LSMArticle(
                 url=response.url,
-                date=dt,
                 error=err,
             )
 
@@ -350,20 +402,20 @@ class LSMSitemapSpider(SitemapSpider):
         try:
             result = collection.update_one(filter_criteria, update_data, upsert=True)
             item_url = item.get("url")
+            self.logger.debug(item_url)
+
             if result.upserted_id is not None:
                 self.logger.info(
-                    f"Inserted new document with URL '{item_url}' and _id: {result.upserted_id}"
+                    f"Inserted new doc in {collection.name}"
                 )
             elif result.modified_count > 0:
-                self.logger.info(
-                    f"Updated existing document with URL '{item_url}'"
-                )
+                self.logger.info(f"Updated existing doc in {collection.name}")
             elif result.matched_count > 0 and result.modified_count == 0:
-                self.logger.info(f"Existing document {item_url} matches new entry. Skipped.")
-            else:
-                self.logger.warning(
-                    f"No document matched URL '{item_url}' and no update occurred"
+                self.logger.info(
+                    f"Same exists in {collection.name}. Skipped."
                 )
+            else:
+                self.logger.warning("No update occurred")
         except DuplicateKeyError:
             self.logger.error(
                 f"DuplicateKeyError for '{item.get('url')}'. Ensure a unique index exists on the 'url' field."
@@ -373,10 +425,10 @@ class LSMSitemapSpider(SitemapSpider):
         self.logger.info("Running spider_closed routine")
         self.logger.info("Checking if previous fails still relevant")
 
-        count_before = self.collection_nok.count_documents({})
-        self.logger.info(f"Beginning of check: {count_before} entries in NOK")
+        count_before = self.collection_nok.count_documents({"reviewed": False})
+        self.logger.info(f"Beginning of check: {count_before} non-reviewed entries in NOK")
         for document in self.collection_nok.find({}):
-            url = document.get('url')
+            url = document.get("url")
             url_in_ok = self.collection_ok.find_one({"url": url})
             if url_in_ok:
                 self.logger.info(f"Found nok {url} in ok")
@@ -384,6 +436,6 @@ class LSMSitemapSpider(SitemapSpider):
                 if result.deleted_count > 0:
                     self.logger.info(f"Removed {url} from nok")
 
-        count_after = self.collection_nok.count_documents({})
-        self.logger.info(f"After check: {count_after} entries in NOK")
-        self.logger.info(f"Removed {count_before - count_after} entries")
+        count_after = self.collection_nok.count_documents({"reviewed": False})
+        self.logger.info(f"After check: {count_after} non-reviewed entries in NOK")
+        self.logger.info(f"Removed {count_before - count_after} NOK entries")
