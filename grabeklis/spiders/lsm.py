@@ -26,6 +26,7 @@ IGNORE_ARTICLE_CATEGORIES = (
     "Komiksi un karikatūras",
     "Podkāsti",
     "Raidījumi",
+    "Spēles",
 )
 
 
@@ -315,17 +316,8 @@ class LSMSitemapSpider(SitemapSpider):
             # This year's dates don't have year, yesterday's date say yesterday etc.
             publish_date = utils.parse_datetime(publish_date, dt_start)
 
-            # Main article <div>
-            article_div = response.xpath('//div[@class="article__body"]')
-
-            # Select text from <p> or <blockquote> elements in article <div>
-            article_as_list = article_div.xpath(
-                "./p/text()|./blockquote/p/text()"
-            ).extract()
-
-            # Edge case: if no text found, try extracting from child <div> elements
-            if not article_as_list or len(article_as_list) == 0:
-                article_as_list = article_div.xpath("./div//text()").extract()
+            xpath_expression = '//div[@class="article__body"]//*[normalize-space()]/text()'
+            article_as_list = response.xpath(xpath_expression).getall()
 
             # Convert from list of strings to a single string
             article = " ".join(article_as_list)
