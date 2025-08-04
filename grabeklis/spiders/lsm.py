@@ -257,8 +257,7 @@ class LSMSitemapSpider(SitemapSpider):
                     self.logger.info(f"Article with errors {item.url} has already been reviewed")
                 else:
                     item.reviewed = False
-                    self._mongo_insert_or_update(self.collection_nok, item)
-                    
+                    self._mongo_insert_or_update(self.collection_nok, item)           
         else:
             if hasattr(self, "collection_ok"):
                 self._mongo_insert_or_update(self.collection_ok, item)

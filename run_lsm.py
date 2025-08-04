@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import dotenv
+import requests
 from loguru import logger
 from datetime import datetime, timedelta
 from scrapy.crawler import CrawlerProcess
@@ -52,3 +53,28 @@ if "MAX_ITEMS" in os.environ:
 process = CrawlerProcess(settings)
 process.crawl("lsmsitemap", **kwargs)
 process.start()
+
+
+today = datetime.now()
+
+# Calculate yesterday's date by subtracting one day
+yesterday = today - timedelta(days=1)
+
+# Format yesterday's date as YYYYMMDD
+formatted_yesterday = yesterday.strftime("%Y%m%d")
+
+params = {
+    "date": formatted_yesterday
+}
+
+req_limit = int(os.getenv("MAX_SUMMARY_REQUEST_COUNT", 5))
+url = os.getenv("SUMMARY_API_URL")
+
+for attempt in range(1, req_limit + 1):
+    logger.info(f"Sending summary request. Attempt {attempt}/{req_limit}")
+    res = requests.post(url, params=params, timeout=600)
+    if res.status_code == 200:
+        logger.info("Request successful")
+        break
+    else:
+        logger.error(f"Status: {res.status_code}")
