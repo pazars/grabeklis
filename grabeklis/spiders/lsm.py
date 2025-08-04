@@ -27,6 +27,7 @@ IGNORE_ARTICLE_CATEGORIES = (
     "Podkāsti",
     "Raidījumi",
     "Spēles",
+    "Vecāki un bērni",
 )
 
 
